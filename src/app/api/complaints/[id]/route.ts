@@ -4,6 +4,70 @@ import { authOptions } from "@/auth"
 import { prisma } from "@/lib/prisma"
 
 // GET single complaint by ID
+export async function GET(
+  request: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await context.params;
+    
+    const session = await getServerSession(authOptions)
+    
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const complaint = await prisma.complaint.findUnique({
+      where: { id },
+      include: {
+        status: true,
+        type: true,
+        branch: true,
+        lineOfBusiness: true,
+        assignedTo: {
+          select: {
+            id: true,
+            name: true
+          }
+        },
+        createdBy: {
+          select: {
+            id: true,
+            name: true
+          }
+        },
+        actions: {
+          include: {
+            user: {
+              select: {
+                name: true
+              }
+            }
+          },
+          orderBy: {
+            createdAt: 'desc'
+          },
+          take: 10
+        }
+      }
+    })
+
+    if (!complaint) {
+      return NextResponse.json({ error: "Complaint not found" }, { status: 404 })
+    }
+
+    return NextResponse.json(complaint)
+  } catch (error: any) {
+    console.error("Error fetching complaint:", error)
+    
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    )
+  }
+}
+
+// PUT - Update complaint by ID
 export async function PUT(
   request: Request,
   context: { params: Promise<{ id: string }> }
@@ -129,10 +193,43 @@ export async function PUT(
       { status: 500 }
     )
   }
+}
 
+// DELETE complaint by ID
+export async function DELETE(
+  request: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await context.params;
+    
+    const session = await getServerSession(authOptions)
+    
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    // Check if complaint exists
+    const existingComplaint = await prisma.complaint.findUnique({
+      where: { id }
+    })
+
+    if (!existingComplaint) {
+      return NextResponse.json({ error: "Complaint not found" }, { status: 404 })
+    }
+
+    // Delete complaint
+    await prisma.complaint.delete({
+      where: { id }
+    })
+
+    return NextResponse.json({ message: "Complaint deleted successfully" })
+  } catch (error: any) {
+    console.error("Error deleting complaint:", error)
     
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
     )
   }
+}

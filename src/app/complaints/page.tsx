@@ -114,6 +114,16 @@ interface PaginationState {
   totalPages: number
 }
 
+interface ApiResponse {
+  complaints: Complaint[]
+  pagination: {
+    total: number
+    page: number
+    limit: number
+    totalPages: number
+  }
+}
+
 export default function ComplaintsPage() {
   const { data: session } = useSession()
   const [complaints, setComplaints] = useState<Complaint[]>([])
@@ -173,22 +183,19 @@ export default function ComplaintsPage() {
           fetch("/api/users")
         ])
 
-        // Validate all responses and ensure they are arrays
-        const complaintsData = complaintsRes.ok ? await complaintsRes.json() : []
+        // Validate all responses
+        const complaintsResponse: ApiResponse = complaintsRes.ok ? await complaintsRes.json() : { complaints: [], pagination: { total: 0, page: 1, limit: 10, totalPages: 0 } }
         const statusesData = statusesRes.ok ? await statusesRes.json() : []
         const typesData = typesRes.ok ? await typesRes.json() : []
         const branchesData = branchesRes.ok ? await branchesRes.json() : []
         const lobData = lobRes.ok ? await lobRes.json() : []
         const usersData = usersRes.ok ? await usersRes.json() : []
 
-        // Ensure complaintsData is an array
-        const safeComplaints = Array.isArray(complaintsData) ? complaintsData : []
+        // Extract complaints array from response object
+        const safeComplaints = Array.isArray(complaintsResponse.complaints) 
+          ? complaintsResponse.complaints 
+          : (Array.isArray(complaintsResponse) ? complaintsResponse : [])
         
-        if (!Array.isArray(complaintsData) && complaintsRes.ok) {
-          console.error("Complaints API did not return an array:", complaintsData)
-          toast.error("Invalid data format received from server")
-        }
-
         setComplaints(safeComplaints)
         setFilteredComplaints(safeComplaints)
         setPagination(prev => ({

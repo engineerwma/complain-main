@@ -3,6 +3,107 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/auth"
 import { prisma } from "@/lib/prisma"
 
+// GET - Get assignment information for a complaint
+export async function GET(
+  request: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await context.params;
+    
+    const session = await getServerSession(authOptions)
+    
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    // Get the complaint with current assignment
+    const complaint = await prisma.complaint.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        complaintNumber: true,
+        customerName: true,
+        assignedTo: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        },
+        branch: {
+          select: {
+            id: true,
+            name: true
+          }
+        },
+        lineOfBusiness: {
+          select: {
+            id: true,
+            name: true
+          }
+        }
+      }
+    })
+
+    if (!complaint) {
+      return NextResponse.json({ error: "Complaint not found" }, { status: 404 })
+    }
+
+    // Get all users who can be assigned (users in the same branch and line of business)
+    const availableUsers = await prisma.user.findMany({
+      where: {
+        branchId: complaint.branch.id,
+        lineOfBusinessId: complaint.lineOfBusiness.id,
+        role: {
+          in: ["USER", "ADMIN"] // Include both USER and ADMIN for manual assignment
+        },
+        isActive: true
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        _count: {
+          select: {
+            assignedComplaints: {
+              where: {
+                status: {
+                  name: {
+                    in: ["PENDING", "IN_PROGRESS"]
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      orderBy: [
+        { role: 'desc' }, // ADMINS first
+        { name: 'asc' }
+      ]
+    })
+
+    return NextResponse.json({
+      complaint,
+      availableUsers: availableUsers.map(user => ({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        activeComplaints: user._count.assignedComplaints
+      }))
+    })
+  } catch (error) {
+    console.error("Error fetching assignment data:", error)
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    )
+  }
+}
+
 // Helper function to automatically assign a complaint to a suitable user
 async function assignComplaintAutomatically(complaintId: string) {
   // First get the complaint details
@@ -54,9 +155,9 @@ async function assignComplaintAutomatically(complaintId: string) {
   }
 
   // Log candidate users for debugging
- candidateUsers.forEach((user: any) => { // Add type annotation here
-  console.log(`Candidate: ${user.name} (${user.role}) with ${user._count.assignedComplaints} active complaints`);
-});
+  candidateUsers.forEach((user: any) => { // Add type annotation here
+    console.log(`Candidate: ${user.name} (${user.role}) with ${user._count.assignedComplaints} active complaints`);
+  });
 
   // Sort users by the number of active complaints (ascending)
   candidateUsers.sort((a:any, b:any) => 
@@ -108,12 +209,13 @@ async function assignComplaintAutomatically(complaintId: string) {
   return updatedComplaint;
 }
 
+// POST - Assign a complaint to a user
 export async function POST(
   request: Request,
-  context: { params: Promise<{ id: string }> } // ✅ params is now a Promise
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await context.params; // ✅ Await the params first!
+    const { id } = await context.params;
     
     const session = await getServerSession(authOptions)
     

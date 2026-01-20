@@ -128,13 +128,7 @@ function SignInContent() {
                 transition={{ delay: 0.2 }}
                 className="text-3xl font-bold text-gray-900"
               >
-                <Image 
-                  src="/main-logo.png" 
-                  alt="GIG Egypt Life Takaful" 
-                  width={60} 
-                  height={60}
-                  className="object-contain inline-block mr-2"
-                />
+            
                 Welcome back
               </motion.h2>
               <motion.p
